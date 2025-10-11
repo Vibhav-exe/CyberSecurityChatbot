@@ -1,4 +1,8 @@
 import validators
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 def get_link():
     url = input("Enter the URL: ")
@@ -31,6 +35,12 @@ def check_suspicious_pattern(url):
 
 
 
+api_key = os.getenv('GOOGLE_API_KEY')
+if api_key:
+    print(f"API Key loaded: {api_key[:10]}...")
+else:
+    print("No API Key found in environment variables.")
+
 
 link = get_link()
 if is_valid_url(link):
@@ -38,3 +48,4 @@ if is_valid_url(link):
     check_suspicious_pattern(link)
 else:
     print(f"The URL '{link}' is not valid.")
+
