@@ -1,5 +1,6 @@
 import sqlite3
 
+#Final Release Note: This module manages the scan history database for storing scan results.
 
 def create_scan_history_table():
     """Create table to store scan results for learning"""

@@ -1,5 +1,5 @@
 import sqlite3
-
+#Final Release Note: This module manages the brands database for storing brand information.
 
 def create_database():
     """Create database and brands table if it doesn't exist"""

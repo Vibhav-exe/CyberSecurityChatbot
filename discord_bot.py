@@ -12,12 +12,12 @@ from linkgetter import (
 from database import create_database
 from scan_history import create_scan_history_table, save_scan_result
 
-# Load environment variables
+# Load env variables
 load_dotenv()
 create_database()
 create_scan_history_table()
 
-# Bot setup - Disable default help command
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
@@ -53,10 +53,10 @@ async def scan_url(ctx, url: str = None):
     msg = await ctx.send(embed=embed)
 
     try:
-        # Normalize URL
+        
         url = normalize_url(url)
 
-        # Validate URL
+        # Validates the URL
         if not is_valid_url(url):
             embed = discord.Embed(
                 title="❌ Invalid URL",
@@ -66,7 +66,7 @@ async def scan_url(ctx, url: str = None):
             await msg.edit(embed=embed)
             return
 
-        # Expand shortened URLs
+        # Expands shortened URLs
         expansion_result = expand_shortened_url(url)
         url_to_check = expansion_result.get('expanded_url', url)
 
@@ -78,19 +78,19 @@ async def scan_url(ctx, url: str = None):
             )
             await ctx.send(embed=embed)
 
-        # Check suspicious patterns
+        # Checks the url for suspicious patterns
         has_suspicious = check_suspicious_pattern(url_to_check)
 
-        # Check brand impersonation
+        # Check the url for brand impersonation
         impersonation_result = check_brand_impersonation(url_to_check)
 
-        # Check VirusTotal
+        # Checks with VirusTotal
         vt_result = check_virustotal(url_to_check)
 
-        # Check Google Safe Browsing
+        # Checks with Google Safe Browsing
         gs_result = check_google_safe_browsing(url_to_check)
 
-        # Compile scan data
+        
         scan_data = {
             'url': url_to_check,
             'real_domain': impersonation_result.get('real_domain', ''),
@@ -104,14 +104,14 @@ async def scan_url(ctx, url: str = None):
             'impersonation': impersonation_result.get('impersonation', False)
         }
 
-        # Get AI prediction
+        # Takes AI prediction
         ai_result = ai_predict_maliciousness(url_to_check, scan_data)
 
-        # Save to database
+        # Saves to the database
         scan_data['verdict'] = ai_result['verdict']
         save_scan_result(url_to_check, scan_data)
 
-        # Create result embed
+        # Creates result 
         score = ai_result['score']
         verdict = ai_result['verdict']
 
@@ -135,7 +135,7 @@ async def scan_url(ctx, url: str = None):
             color=color
         )
 
-        # Add fields
+        # Adds field
         embed.add_field(
             name="🎯 Risk Score",
             value=f"**{score}/100**",
@@ -154,14 +154,14 @@ async def scan_url(ctx, url: str = None):
             inline=True
         )
 
-        # VirusTotal results
+        # VirusTotal result
         if 'error' not in vt_result:
             vt_text = f"🚨 Malicious: **{vt_result['malicious']}**\n⚠️ Suspicious: **{vt_result['suspicious']}**\n✅ Harmless: **{vt_result['harmless']}**"
             embed.add_field(name="🛡️ VirusTotal Scan", value=vt_text, inline=False)
         else:
             embed.add_field(name="🛡️ VirusTotal Scan", value=f"❌ {vt_result['error']}", inline=False)
 
-        # Google Safe Browsing
+        # Google Safe Browsing result
         if 'error' not in gs_result:
             if gs_result['threat_detected']:
                 gsb_text = "🚨 **THREAT DETECTED**"
@@ -173,7 +173,7 @@ async def scan_url(ctx, url: str = None):
         else:
             embed.add_field(name="🔐 Google Safe Browsing", value=f"❌ {gs_result['error']}", inline=False)
 
-        # Brand Impersonation
+        # Check for Brand Impersonation
         if impersonation_result.get('impersonation'):
             embed.add_field(
                 name="⚠️ Brand Impersonation Detected",
@@ -357,7 +357,7 @@ async def on_command_error(ctx, error):
         print(f"Error: {error}")
 
 
-# Run the bot
+# Runs the discord bot
 if __name__ == "__main__":
     token = os.getenv('DISCORD_BOT_TOKEN')
 

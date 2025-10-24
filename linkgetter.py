@@ -160,42 +160,77 @@ def check_virustotal(url):
     api_key = os.getenv('VIRUSTOTAL_API_KEY')
 
     if not api_key:
-        return{'error': 'no API key found for VirusTotal.'}
+        return {'error': 'no API key found for VirusTotal.'}
 
     headers = {'x-apikey': api_key}
+    
+    # Use URL encoding for better compatibility
+    import base64
+    url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
+    
+    # First, try to get existing analysis
+    check_url = f'https://www.virustotal.com/api/v3/urls/{url_id}'
+    check_response = requests.get(check_url, headers=headers)
+    
+    if check_response.status_code == 200:
+        # URL already analyzed, get results directly
+        data = check_response.json()
+        stats = data['data']['attributes']['last_analysis_stats']
+        return {
+            'malicious': stats['malicious'],
+            'suspicious': stats['suspicious'],
+            'harmless': stats['harmless'],
+            'undetected': stats['undetected'],
+            'total_scans': sum(stats.values()),
+            'threat_detected': stats['malicious'] > 0 or stats['suspicious'] > 0
+        }
+    
+    # If not found, submit for analysis
     data = {'url': url}
-
     response = requests.post(
         'https://www.virustotal.com/api/v3/urls',
         headers=headers,
         data=data,
     )
+    
     if response.status_code != 200:
-        return{'error': f'VirusTotal API error: {response.status_code}'}
+        return {'error': f'VirusTotal API error: {response.status_code} - {response.text}'}
 
     result = response.json()
     analysis_id = result['data']['id']
 
-    time.sleep(5)
-
-    analysis_response = requests.get(
-        f'https://www.virustotal.com/api/v3/analyses/{analysis_id}',
-        headers = headers
-    )
-    if analysis_response.status_code != 200:
-        return{'error': 'Could not get analysis results'}
-
-    analysis_data = analysis_response.json()
-    stats = analysis_data['data']['attributes']['stats']
-
-    return {
-        'malicious': stats['malicious'],
-        'suspicious': stats['suspicious'],
-        'harmless': stats['harmless'],
-        'undetected': stats['undetected'],
-        'total_scans': sum(stats.values()),
-        'threat_detected': stats['malicious'] > 0 or stats['suspicious'] > 0
-    }
+    # Wait longer and poll for results
+    max_attempts = 6
+    for attempt in range(max_attempts):
+        time.sleep(10)  # Increased from 5 to 10 seconds
+        
+        analysis_response = requests.get(
+            f'https://www.virustotal.com/api/v3/analyses/{analysis_id}',
+            headers=headers
+        )
+        
+        if analysis_response.status_code != 200:
+            if attempt == max_attempts - 1:
+                return {'error': f'Could not get analysis results after {max_attempts} attempts'}
+            continue
+        
+        analysis_data = analysis_response.json()
+        status = analysis_data['data']['attributes']['status']
+        
+        if status == 'completed':
+            stats = analysis_data['data']['attributes']['stats']
+            return {
+                'malicious': stats['malicious'],
+                'suspicious': stats['suspicious'],
+                'harmless': stats['harmless'],
+                'undetected': stats['undetected'],
+                'total_scans': sum(stats.values()),
+                'threat_detected': stats['malicious'] > 0 or stats['suspicious'] > 0
+            }
+        
+        print(f"Analysis in progress... (attempt {attempt + 1}/{max_attempts})")
+    
+    return {'error': 'Analysis timeout - try again later'}
 
 
 def check_google_safe_browsing(url):
@@ -405,19 +440,20 @@ if is_valid_url(url_to_check):
 
 
 
+    has_suspicious = check_suspicious_pattern(url_to_check)
 
     scan_data = {
-        'url': url_to_check,
-        'real_domain': impersonation_result.get('real_domain', ''),
-        'has_suspicious_keywords': check_suspicious_pattern(url_to_check),
-        'is_impersonation': impersonation_result.get('impersonation', False),
-        'vt_malicious': vt_result.get('malicious', 0),
-        'vt_suspicious': vt_result.get('suspicious', 0),
-        'gsb_threat': gs_result.get('threat_detected', False) if 'error' not in gs_result else False,
-        'is_shortened': expansion_result.get('is_shortened', False),
-        'suspicious_keywords': 'Found' if check_suspicious_pattern(url_to_check) else 'None',
-        'impersonation': impersonation_result.get('impersonation', False)
-    }
+    'url': url_to_check,
+    'real_domain': impersonation_result.get('real_domain', ''),
+    'has_suspicious_keywords': has_suspicious,
+    'is_impersonation': impersonation_result.get('impersonation', False),
+    'vt_malicious': vt_result.get('malicious', 0) if 'error' not in vt_result else 0,
+    'vt_suspicious': vt_result.get('suspicious', 0) if 'error' not in vt_result else 0,
+    'gsb_threat': gs_result.get('threat_detected', False) if 'error' not in gs_result else False,
+    'is_shortened': expansion_result.get('is_shortened', False),
+    'suspicious_keywords': 'Found' if has_suspicious else 'None',
+    'impersonation': impersonation_result.get('impersonation', False)
+}
 
     print("\n AI Analysis...")
     ai_result = ai_predict_maliciousness(url_to_check, scan_data)
