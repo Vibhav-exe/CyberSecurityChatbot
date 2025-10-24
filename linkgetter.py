@@ -5,14 +5,14 @@ from urllib.parse import urlparse
 import requests
 import time
 from database import create_database, get_brands_from_db
-from scan_history import (create_scan_history_table, save_scan_result, get_scan_history)
-
-
+from scan_history import create_scan_history_table, save_scan_result, get_scan_history
 import google.generativeai as genai
-
+import base64
+import json
 
 
 def extract_real_domain(url):
+    """Extract the actual domain from a URL"""
     parsed = urlparse(url)
     hostname = parsed.netloc
     parts = hostname.split('.')
@@ -21,24 +21,28 @@ def extract_real_domain(url):
         return real_domain, hostname
     return hostname, hostname
 
+
+# Initialize
 load_dotenv()
 create_database()
 create_scan_history_table()
-print(f"done")
+print("✓ Database initialized successfully\n")
 
+# Setup Gemini AI
+model = None
+gemini_api_key = os.getenv('GEMINI_API_KEY')
 
-if gemini_api_key := os.getenv('GEMINI_API_KEY'):
-    model = None
+if gemini_api_key:
+    genai.configure(api_key=gemini_api_key)
+    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    print('✓ AI model loaded successfully')
+else:
+    print('⚠️  Warning: No Gemini API key found, AI features disabled')
 
-    if gemini_api_key:
-        genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        print('AI model loaded')
-    else:
-        print('Warning: No Gemini API key found, AI features disabled')
 
 def get_link():
-    url = input("Enter the URL: ")
+    """Prompt user for URL input"""
+    url = input("\n🔗 Enter the URL to scan: ")
     url = normalize_url(url)
     return url
 
@@ -46,46 +50,42 @@ def get_link():
 def normalize_url(url):
     """Add http:// if protocol is missing"""
     url = url.strip()
-
     if not url.startswith(('http://', 'https://')):
         url = 'http://' + url
-
     return url
 
 
 def is_valid_url(url):
-    if validators.url(url):
-        return True
-    else:
-        return False
+    """Validate URL format"""
+    return validators.url(url)
+
 
 def check_suspicious_pattern(url):
-    suspicious_keywords = ['secure', 'login', 'update', 'verify', 'account', 'confirm', 'banking', 'password']
+    """Check for suspicious keywords in URL"""
+    suspicious_keywords = [
+        'secure', 'login', 'update', 'verify', 'account', 
+        'confirm', 'banking', 'password', 'signin', 'authenticate'
+    ]
     url_lower = url.lower()
     found_keywords = []
 
-    for keywords in suspicious_keywords:
-        if keywords in url_lower:
-            found_keywords.append(keywords)
+    for keyword in suspicious_keywords:
+        if keyword in url_lower:
+            found_keywords.append(keyword)
 
     if found_keywords:
-        print(f"Warning: The URL contains suspicious keywords:")
+        print(f"⚠️  Suspicious keywords detected: {', '.join(found_keywords)}")
         return True
     else:
-        print(f"Warning: The URL does not contain suspicious keywords:")
+        print("✓ No suspicious keywords found")
         return False
 
 
-api_key = os.getenv('GOOGLE_API_KEY')
-
-
 def check_brand_impersonation(url):
-    """Check if the URL contains brand names that could indicate impersonation."""
-
-    # Get brands from database
+    """Detect brand impersonation attempts"""
     brands_data = get_brands_from_db()
-    brand_keywords = [brand[0] for brand in brands_data]  # Just the names
-    official_domains = [brand[1] for brand in brands_data]  # Just the domains
+    brand_keywords = [brand[0] for brand in brands_data]
+    official_domains = [brand[1] for brand in brands_data]
 
     real_domain, full_hostname = extract_real_domain(url)
     full_hostname = full_hostname.lower()
@@ -108,9 +108,9 @@ def check_brand_impersonation(url):
     if impersonation_detected:
         return {
             'impersonation': True,
-            'Legitimate': False,
+            'legitimate': False,
             'brands': impersonation_detected,
-            'Warning': f"⚠️ Impersonating {', '.join(impersonation_detected)}! Real domain is: {real_domain}"
+            'warning': f"⚠️  Impersonating {', '.join(impersonation_detected)}! Real domain is: {real_domain}"
         }
 
     return {
@@ -118,19 +118,22 @@ def check_brand_impersonation(url):
         'real_domain': real_domain,
     }
 
+
 def expand_shortened_url(url):
-    """Expands the shortened url like bit.ly"""
-    shorteners = ['bit.ly', 'aka.ms', 'goo.gl', 'tinyurl.com', 'ow.ly',
-                  't.co', 'shorturl.at', 'adf.ly', 'bl.ink', 'lnkd.in',
-                  'rb.gy', 'cutt.ly', 'short.io']
+    """Expand shortened URLs (bit.ly, tinyurl, etc.)"""
+    shorteners = [
+        'bit.ly', 'aka.ms', 'goo.gl', 'tinyurl.com', 'ow.ly',
+        't.co', 'shorturl.at', 'adf.ly', 'bl.ink', 'lnkd.in',
+        'rb.gy', 'cutt.ly', 'short.io'
+    ]
 
     try:
         parsed = urlparse(url)
         is_shortened = any(shortener in parsed.netloc for shortener in shorteners)
 
         if is_shortened:
-            print(f'⚠️ Shortened URL detected: {parsed.netloc}')
-            print("Expanding...")
+            print(f'🔗 Shortened URL detected: {parsed.netloc}')
+            print("   Expanding to reveal destination...")
 
             response = requests.head(url, allow_redirects=True, timeout=10)
             expanded_url = response.url
@@ -156,24 +159,22 @@ def expand_shortened_url(url):
 
 
 def check_virustotal(url):
-    """Check the URL against VirusTotal API."""
+    """Scan URL with VirusTotal (70+ antivirus engines)"""
     api_key = os.getenv('VIRUSTOTAL_API_KEY')
 
     if not api_key:
-        return {'error': 'no API key found for VirusTotal.'}
+        return {'error': 'No VirusTotal API key found'}
 
     headers = {'x-apikey': api_key}
     
-    # Use URL encoding for better compatibility
-    import base64
+    # Use URL encoding
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
     
-    # First, try to get existing analysis
+    # Try to get existing analysis first
     check_url = f'https://www.virustotal.com/api/v3/urls/{url_id}'
     check_response = requests.get(check_url, headers=headers)
     
     if check_response.status_code == 200:
-        # URL already analyzed, get results directly
         data = check_response.json()
         stats = data['data']['attributes']['last_analysis_stats']
         return {
@@ -185,24 +186,20 @@ def check_virustotal(url):
             'threat_detected': stats['malicious'] > 0 or stats['suspicious'] > 0
         }
     
-    # If not found, submit for analysis
+    # Submit new scan if not found
     data = {'url': url}
-    response = requests.post(
-        'https://www.virustotal.com/api/v3/urls',
-        headers=headers,
-        data=data,
-    )
+    response = requests.post('https://www.virustotal.com/api/v3/urls', headers=headers, data=data)
     
     if response.status_code != 200:
-        return {'error': f'VirusTotal API error: {response.status_code} - {response.text}'}
+        return {'error': f'VirusTotal API error: {response.status_code}'}
 
     result = response.json()
     analysis_id = result['data']['id']
 
-    # Wait longer and poll for results
+    # Poll for results
     max_attempts = 6
     for attempt in range(max_attempts):
-        time.sleep(10)  # Increased from 5 to 10 seconds
+        time.sleep(10)
         
         analysis_response = requests.get(
             f'https://www.virustotal.com/api/v3/analyses/{analysis_id}',
@@ -211,7 +208,7 @@ def check_virustotal(url):
         
         if analysis_response.status_code != 200:
             if attempt == max_attempts - 1:
-                return {'error': f'Could not get analysis results after {max_attempts} attempts'}
+                return {'error': f'Could not retrieve analysis after {max_attempts} attempts'}
             continue
         
         analysis_data = analysis_response.json()
@@ -228,45 +225,39 @@ def check_virustotal(url):
                 'threat_detected': stats['malicious'] > 0 or stats['suspicious'] > 0
             }
         
-        print(f"Analysis in progress... (attempt {attempt + 1}/{max_attempts})")
+        print(f"   Analysis in progress... ({attempt + 1}/{max_attempts})")
     
-    return {'error': 'Analysis timeout - try again later'}
+    return {'error': 'Analysis timeout - please try again later'}
+
+
+import requests
+
 
 
 def check_google_safe_browsing(url):
-    """Check URL against Google Safe Browsing API using Lookup API"""
+    """Check URL with Google Safe Browsing API"""
     api_key = os.getenv('GOOGLE_SAFE_BROWSING_KEY')
 
     if not api_key:
         return {'error': 'No Google Safe Browsing API key found'}
 
-    # Encode URL
-    import urllib.parse
-    encoded_url = urllib.parse.quote(url, safe='')
-
-    # Use v4 Lookup API
     api_url = f'https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}'
 
     payload = {
         "client": {
-            "clientId": "yourcompanyname",
+            "clientId": "cybershield-bot",
             "clientVersion": "1.0.0"
         },
         "threatInfo": {
-            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING"],
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"],
             "platformTypes": ["ANY_PLATFORM"],
             "threatEntryTypes": ["URL"],
-            "threatEntries": [
-                {"url": url}
-            ]
+            "threatEntries": [{"url": url}]
         }
     }
 
     try:
-        response = requests.post(api_url, json=payload)
-
-        print(f"Debug - Status Code: {response.status_code}")
-        print(f"Debug - Response: {response.text}")
+        response = requests.post(api_url, json=payload, timeout=10)
 
         if response.status_code == 200:
             result = response.json()
@@ -283,36 +274,36 @@ def check_google_safe_browsing(url):
                     'threats': []
                 }
         else:
-            return {'error': f'API error: {response.status_code} - {response.text}'}
+            return {'error': f'API error: {response.status_code}'}
 
     except Exception as e:
         return {'error': f'Error: {str(e)}'}
 
 
 def ai_predict_maliciousness(url, scan_results):
-    """Use Gemini to predict maliciousness score based on scan results"""
+    """Use AI to predict threat level"""
     if not model:
-        return {"score": 0, "explanation": "AI not available"}
+        score = calculate_rule_based_score(scan_results)
+        return {
+            "score": score,
+            "verdict": get_verdict(score),
+            "explanation": "AI not available - using rule-based analysis",
+            "confidence": "MEDIUM"
+        }
 
-    # Get historical data for context
-    from scan_history import get_scan_history
-    history = get_scan_history(20)
-
-    
-    prompt = f"""This is a cybersecurity AI that predicts website maliciousness scores.
-
-Based on scan results it'll provide a maliciousness score from 0-100 and explanation.
+    prompt = f"""You are a cybersecurity AI analyzing URL threats.
 
 SCAN RESULTS FOR: {url}
 - Suspicious Keywords: {scan_results.get('suspicious_keywords', 'None')}
 - Brand Impersonation: {scan_results.get('impersonation', False)}
 - VirusTotal Malicious: {scan_results.get('vt_malicious', 0)}
 - VirusTotal Suspicious: {scan_results.get('vt_suspicious', 0)}
-- Google Safe Browsing Threat: {scan_results.get('gsb_threat', False)}
+- Google Safe Browsing: {scan_results.get('gsb_threat', False)}
+- URLhaus Detection: {scan_results.get('urlhaus_threat', False)}
 - URL Shortened: {scan_results.get('is_shortened', False)}
 - Real Domain: {scan_results.get('real_domain', 'Unknown')}
 
-Respond in this exact JSON format:
+Provide a maliciousness score (0-100) and analysis in JSON format:
 {{
     "score": <0-100>,
     "verdict": "<SAFE|SUSPICIOUS|DANGEROUS|CRITICAL>",
@@ -323,23 +314,20 @@ Respond in this exact JSON format:
 
     try:
         response = model.generate_content(prompt)
-        # Parse JSON response
-        import json
         result = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
         return result
     except Exception as e:
-        # Fallback to rule-based scoring
         score = calculate_rule_based_score(scan_results)
         return {
             "score": score,
             "verdict": get_verdict(score),
-            "explanation": "AI unavailable, using rule-based scoring",
+            "explanation": f"AI error: {str(e)} - using rule-based scoring",
             "confidence": "MEDIUM"
         }
 
 
 def calculate_rule_based_score(scan_results):
-    """Fallback rule-based scoring"""
+    """Calculate threat score using rules"""
     score = 0
 
     if scan_results.get('vt_malicious', 0) > 0:
@@ -348,6 +336,8 @@ def calculate_rule_based_score(scan_results):
         score += 20
     if scan_results.get('gsb_threat', False):
         score += 30
+    if scan_results.get('urlhaus_threat', False):
+        score += 25
     if scan_results.get('impersonation', False):
         score += 25
     if scan_results.get('suspicious_keywords', False):
@@ -370,109 +360,123 @@ def get_verdict(score):
         return "CRITICAL"
 
 
-def chat_with_gemini(user_message, scan_results=None):
-    """Chat with Gemini AI for URL security"""
-    if not model:
-        return "Gemini AI not available."
+# MAIN EXECUTION
 
-    context = "You are a cybersecurity assistant helping users check if URLs are safe.\n\n"
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print("🛡️  CYBERSHIELD - URL THREAT DETECTOR".center(60))
+    print("="*60)
+    
+    link = get_link()
+    
+    print("\n" + "-"*60)
+    print("Starting comprehensive security scan...".center(60))
+    print("-"*60 + "\n")
 
-    if scan_results:
-        context += f"Recent scan results:\n{scan_results}\n\n"
+    # Expand shortened URLs
+    expansion_result = expand_shortened_url(link)
+    if 'error' in expansion_result:
+        print(f"⚠️  {expansion_result['error']}\n")
 
-    context += f"User: {user_message}"
+    url_to_check = expansion_result.get('expanded_url', link)
 
-    try:
-        response = model.generate_content(context)
-        return response.text
-    except Exception as e:
-        return f"Error: {str(e)}"
+    if not is_valid_url(url_to_check):
+        print(f"\n❌ Invalid URL: '{url_to_check}'")
+        print("Please check the URL format and try again.\n")
+        exit(1)
 
-
-
-
-
-link = get_link()
-
-# Expand shortened URLs first
-expansion_result = expand_shortened_url(link)
-if 'error' in expansion_result:
-    print(f"Warning: {expansion_result['error']}")
-
-# Use expanded URL for all checks
-url_to_check = expansion_result.get('expanded_url', link)
-
-if is_valid_url(url_to_check):
-    print(f"\nThe URL '{url_to_check}' is valid.")
-    check_suspicious_pattern(url_to_check)
-
+    print(f"\n✓ URL validated: {url_to_check}\n")
+    
+    # Pattern checks
+    print("━" * 60)
+    print("PATTERN ANALYSIS")
+    print("━" * 60)
+    has_suspicious = check_suspicious_pattern(url_to_check)
+    
     impersonation_result = check_brand_impersonation(url_to_check)
     if impersonation_result['impersonation']:
-        print(impersonation_result['Warning'])
+        print(impersonation_result['warning'])
     else:
-        print(f"✓ Real domain: {impersonation_result['real_domain']}")
+        print(f"✓ Real domain verified: {impersonation_result['real_domain']}")
 
-    print("\nChecking with VirusTotal...")
+    # API checks
+    print("\n" + "━" * 60)
+    print("THREAT INTELLIGENCE SCAN")
+    print("━" * 60)
+    
+    print("\n  Scanning with VirusTotal ...")
     vt_result = check_virustotal(url_to_check)
-
     if 'error' in vt_result:
-        print(f"VirusTotal Error: {vt_result['error']}")
+        print(f"   ❌ {vt_result['error']}")
     else:
-        print(f"VirusTotal Results:")
-        print(f"  Malicious: {vt_result['malicious']}")
-        print(f"  Suspicious: {vt_result['suspicious']}")
-        print(f"  Harmless: {vt_result['harmless']}")
+        print(f"   Malicious: {vt_result['malicious']}")
+        print(f"   Suspicious: {vt_result['suspicious']}")
+        print(f"   Harmless: {vt_result['harmless']}")
         if vt_result['threat_detected']:
-            print("  ⚠️ THREAT DETECTED!")
+            print("   🚨 THREAT DETECTED!")
         else:
-            print("  ✓ No threats detected")
-    print("\nChecking with Google Safe Browsing...")
+            print("   ✓ Clean")
+
+    print("\n🔐 Checking Google Safe Browsing...")
     gs_result = check_google_safe_browsing(url_to_check)
     if 'error' in gs_result:
-        print(f"Google Safe Browsing Error: {gs_result['error']}")
+        print(f"   ❌ {gs_result['error']}")
     else:
         if gs_result['threat_detected']:
-            print(f"⚠️ THREAT DETECTED by Google!")
-            print(f"Threat types: {','.join(gs_result['threats'])}")
+            print(f"   🚨 THREAT DETECTED!")
+            print(f"   Types: {', '.join(gs_result['threats'])}")
         else:
-            print("✓ No threats detected by Google Safe Browsing")
+            print("   ✓ No threats detected")
 
 
 
-
-    has_suspicious = check_suspicious_pattern(url_to_check)
-
+    # Compile scan data
     scan_data = {
-    'url': url_to_check,
-    'real_domain': impersonation_result.get('real_domain', ''),
-    'has_suspicious_keywords': has_suspicious,
-    'is_impersonation': impersonation_result.get('impersonation', False),
-    'vt_malicious': vt_result.get('malicious', 0) if 'error' not in vt_result else 0,
-    'vt_suspicious': vt_result.get('suspicious', 0) if 'error' not in vt_result else 0,
-    'gsb_threat': gs_result.get('threat_detected', False) if 'error' not in gs_result else False,
-    'is_shortened': expansion_result.get('is_shortened', False),
-    'suspicious_keywords': 'Found' if has_suspicious else 'None',
-    'impersonation': impersonation_result.get('impersonation', False)
-}
+        'url': url_to_check,
+        'real_domain': impersonation_result.get('real_domain', ''),
+        'has_suspicious_keywords': has_suspicious,
+        'is_impersonation': impersonation_result.get('impersonation', False),
+        'vt_malicious': vt_result.get('malicious', 0) if 'error' not in vt_result else 0,
+        'vt_suspicious': vt_result.get('suspicious', 0) if 'error' not in vt_result else 0,
+        'gsb_threat': gs_result.get('threat_detected', False) if 'error' not in gs_result else False,
 
-    print("\n AI Analysis...")
+        'is_shortened': expansion_result.get('is_shortened', False),
+        'suspicious_keywords': 'Found' if has_suspicious else 'None',
+        'impersonation': impersonation_result.get('impersonation', False)
+    }
+
+    # AI Analysis
+    print("\n" + "━" * 60)
+    print("🤖 AI ANALYSIS")
+    print("━" * 60)
+    
     ai_result = ai_predict_maliciousness(url_to_check, scan_data)
 
-    print(f"\n{'=' * 50}")
-    print(f"{'AI PREDICTION'.center(50)}")
-    print(f"{'=' * 50}")
-    print(f"Maliciousness Score: {ai_result['score']}/100")
-    print(f"Verdict: {ai_result['verdict']}")
-    print(f"Confidence: {ai_result['confidence']}")
-    print(f"Explanation: {ai_result['explanation']}")
-    print(f"{'=' * 50}")
+    # Display results
+    print("\n" + "="*60)
+    print("FINAL VERDICT".center(60))
+    print("="*60)
+    
+    score = ai_result['score']
+    verdict = ai_result['verdict']
+    
+    # Color-coded output
+    verdict_emoji = {
+        "SAFE": "✅",
+        "SUSPICIOUS": "⚠️ ",
+        "DANGEROUS": "🚨",
+        "CRITICAL": "☠️ "
+    }
+    
+    print(f"\n{verdict_emoji.get(verdict, '❓')} THREAT LEVEL: {verdict}")
+    print(f"📊 Risk Score: {score}/100")
+    print(f"🎯 Confidence: {ai_result['confidence']}")
+    print(f"\n💡 Analysis: {ai_result['explanation']}")
+    print("\n" + "="*60)
 
+    # Save to database
     scan_data['verdict'] = ai_result['verdict']
-
     save_scan_result(url_to_check, scan_data)
-
-
-
-else:
-    print(f"The URL '{url_to_check}' is not valid.")
-
+    
+    print("\n✓ Scan results saved to database")
+   
