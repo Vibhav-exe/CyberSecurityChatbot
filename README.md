@@ -1,4 +1,4 @@
-# 🛡️ CyberShield - AI-Powered URL Threat Detector
+# 🛡️ PhishDetect - AI-Powered URL Threat Detector
 
 > Protects from malicious URLs, one scan at a time.
 
@@ -7,9 +7,16 @@
 ---
 
 ## 🎯 Why I Built This
+In 2021, a phishing scam got my Steam account. The fake login page looked legitimate - almost identical URL, professional design, everything.
 
-In 2021, I fell victim to a phishing attack that cost me my Steam account. As a gamer and developer, losing years of progress was devastating.
-But instead of just moving on, I channeled that frustration into building CyberShield - an AI-powered bot that detects the exact type of threat that fooled me. Now, I'm turning my mistake into protection for others.
+I managed to recover it after weeks of proving ownership to Steam support. Submitting old payment records, answering security questions, waiting for responses - the whole process was tedious and frustrating.
+
+That experience taught me something: even people who know about these threats can still fall for them. And recovery? Not worth it.
+
+**PhishDetect came from that realization.** It's a bot that scans URLs and explains why they're dangerous, using AI and multiple threat databases. Think of it as a second pair of eyes before you click - because dealing with the aftermath is way worse than just not clicking in the first place.
+
+**My loss became my lesson. Now it's my contribution to making the internet safer.** 🎣
+
 ---
 
 ## ✨ What Makes It Special?
@@ -21,7 +28,7 @@ Think of it as having multiple security guards checking the same door:
 - **Custom AI Analysis** spots patterns humans might miss
 
 ### 🤖 **AI-Powered Intelligence**
-Not just a simple "safe or unsafe" - CyberShield uses **Google Gemini AI** to:
+Not just a simple "safe or unsafe" - PhishDetect uses **Google Gemini AI** to:
 - Understand context and patterns
 - Provide detailed explanations
 - Learn from previous scans
@@ -114,8 +121,8 @@ You'll need:
 
 **1. Clone this repo**
 ```bash
-git clone https://github.com/yourusername/CyberShield.git
-cd CyberShield
+git clone https://github.com/yourusername/PhishDetect.git
+cd PhishDetect
 ```
 
 **2. Set up virtual environment**
@@ -255,7 +262,7 @@ Final Score:
 
 ## 📂 Project Structure
 ```
-CyberShield/
+PhishDetect/
 │
 ├── discord_bot.py          # Discord bot implementation
 ├── link_getter.py          # Core scanning engine
@@ -272,7 +279,7 @@ CyberShield/
 
 ## 🎯 Real-World Impact
 
-**What CyberShield Protects Against:**
+**What PhishDetect Protects Against:**
 
 | Threat Type | Example | Detection Method |
 |-------------|---------|------------------|
@@ -373,7 +380,7 @@ See [LICENSE](LICENSE) for full details.
 
 **Hi, I'm Vibha!** 👋
 
-I built CyberShield as my first major project to combine my interests in:
+I built PhishDetect as my first major project to combine my interests in:
 - 🔐 Cybersecurity
 - 🤖 Artificial Intelligence  
 - 💻 Python Development
@@ -447,6 +454,6 @@ Every star motivates me to keep building! 🚀
 
 *Protecting the internet, one URL at a time* 🛡️
 
-[⬆ Back to Top](#-cybershield---ai-powered-url-threat-detector)
+[⬆ Back to Top](#-PhishDetect---ai-powered-url-threat-detector)
 
 </div>
