@@ -1,5 +1,5 @@
 import sqlite3
-#Final Release Note: This module manages the brands database for storing brand information.
+
 
 def create_database():
     """Create database and brands table if it doesn't exist"""
@@ -140,3 +140,10 @@ def list_all_brands():
     for brand_name, official_url in brands:
         print(f"{brand_name}: {official_url}")
     print(f"\nTotal: {len(brands)} brands")
+
+
+
+
+
+
+    #Final Release Note: This module manages the brands database for storing brand information.

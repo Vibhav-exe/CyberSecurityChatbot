@@ -2,6 +2,9 @@
 .env
 *.env
 
+#Miscellaneous files
+.Testtoken.py
+
 # Virtual Environment
 venv/
 .venv/
@@ -87,5 +90,7 @@ htmlcov/
 # Project specific
 phishtank_data.json
 scan_results/
-temp/".env" 
-".env" 
+temp/
+Testtoken.py
+Testtoken.py
+.gitignore

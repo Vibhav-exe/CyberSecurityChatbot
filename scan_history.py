@@ -1,6 +1,6 @@
 import sqlite3
 
-#Final Release Note: This module manages the scan history database for storing scan results.
+
 
 def create_scan_history_table():
     """Create table to store scan results for learning"""
@@ -90,3 +90,8 @@ def get_scan_history(limit=50):
     finally:
         if conn:
             conn.close()
+
+
+
+
+#Final Release Note: This module manages the brands database for storing brand information.            
