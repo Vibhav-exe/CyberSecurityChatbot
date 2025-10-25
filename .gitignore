@@ -88,3 +88,4 @@ htmlcov/
 phishtank_data.json
 scan_results/
 temp/".env" 
+".env" 
