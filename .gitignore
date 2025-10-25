@@ -87,4 +87,4 @@ htmlcov/
 # Project specific
 phishtank_data.json
 scan_results/
-temp/
+temp/".env" 
